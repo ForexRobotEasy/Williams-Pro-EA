@@ -1,0 +1,129 @@
+
+//+------------------------------------------------------------------+
+//|                                                       Williams Pro EA |
+//|                                        Copyright 2022, Forex Robot Easy Team |
+//|                                                     https://forexroboteasy.com |
+//+------------------------------------------------------------------+
+#property copyright 'Copyright 2022, Forex Robot Easy Team'
+#property link      'https://forexroboteasy.com'
+#property version   '1.0'
+
+//--- input parameters
+extern int    StopLoss                = 100;      // Stop Loss in pips
+extern int    TakeProfit              = 200;      // Take Profit in pips
+extern double LotSize                 = 0.01;     // Lot Size
+extern int    MagicNumber             = 123456;   // Magic Number
+
+//--- indicator handles
+int    iWilliamsR;
+int    iEMA;
+
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                         |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   //--- check if the indicator is available
+   iWilliamsR = iCustom(Symbol(), Period(), 'WilliamsR');
+   if (iWilliamsR == INVALID_HANDLE)
+   {
+      Print('Failed to load WilliamsR indicator!');
+      return INIT_FAILED;
+   }
+
+   //--- check if the indicator is available
+   iEMA = iMA(Symbol(), Period(), 14, 0, MODE_EMA, PRICE_HIGH_LOW);
+   if (iEMA == INVALID_HANDLE)
+   {
+      Print('Failed to load EMA indicator!');
+      return INIT_FAILED;
+   }
+
+   //--- successful initialization
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| Custom expert advisor start function                              |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   //--- get the WilliamsR value
+   double williamsR = iCustom(Symbol(), Period(), 'WilliamsR', 14, 0);
+
+   //--- get the EMA value
+   double ema = iMA(Symbol(), Period(), 14, 0, MODE_EMA, PRICE_HIGH_LOW, 0);
+
+   //--- check for buy signal
+   if (williamsR < -80 && Close[1] > ema)
+   {
+      //--- open a buy market order
+      double stopLoss = Bid - StopLoss * Point;
+      double takeProfit = Bid + TakeProfit * Point;
+      int ticket = OrderSend(Symbol(), OP_BUY, LotSize, Bid, 0, stopLoss, takeProfit, 'Buy Order', MagicNumber, 0, Green);
+      if (ticket > 0)
+      {
+         Print('Buy order opened successfully with ticket ', ticket);
+      }
+      else
+      {
+         Print('Failed to open buy order! Error code: ', GetLastError());
+      }
+   }
+
+   //--- check for sell signal
+   if (williamsR > -20 && Close[1] < ema)
+   {
+      //--- open a sell market order
+      double stopLoss = Ask + StopLoss * Point;
+      double takeProfit = Ask - TakeProfit * Point;
+      int ticket = OrderSend(Symbol(), OP_SELL, LotSize, Ask, 0, stopLoss, takeProfit, 'Sell Order', MagicNumber, 0, Red);
+      if (ticket > 0)
+      {
+         Print('Sell order opened successfully with ticket ', ticket);
+      }
+      else
+      {
+         Print('Failed to open sell order! Error code: ', GetLastError());
+      }
+   }
+
+   //--- modify stops to break even if the trade moves favorably
+   for (int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      {
+         if (OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+         {
+            if (OrderType() == OP_BUY && OrderStopLoss() < Bid - StopLoss * Point)
+            {
+               //--- modify stop loss to break even
+               double newStopLoss = OrderOpenPrice();
+               if (OrderModify(OrderTicket(), OrderOpenPrice(), newStopLoss, OrderTakeProfit(), 0, Green))
+               {
+                  Print('Buy order stop loss modified to break even');
+               }
+               else
+               {
+                  Print('Failed to modify buy order stop loss! Error code: ', GetLastError());
+               }
+            }
+            else if (OrderType() == OP_SELL && OrderStopLoss() > Ask + StopLoss * Point)
+            {
+               //--- modify stop loss to break even
+               double newStopLoss = OrderOpenPrice();
+               if (OrderModify(OrderTicket(), OrderOpenPrice(), newStopLoss, OrderTakeProfit(), 0, Red))
+               {
+                  Print('Sell order stop loss modified to break even');
+               }
+               else
+               {
+                  Print('Failed to modify sell order stop loss! Error code: ', GetLastError());
+               }
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
